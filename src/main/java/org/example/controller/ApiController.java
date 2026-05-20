@@ -4,6 +4,7 @@ import org.example.model.*;
 import org.example.service.ComparisonService;
 import org.example.service.ExcludeKeysService;
 import org.example.service.GitService;
+import org.example.service.ScanService;
 import org.example.service.YamlService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -40,13 +41,16 @@ public class ApiController {
     private final ComparisonService comparisonService;
     private final ExcludeKeysService excludeKeysService;
     private final YamlService yamlService;
+    private final ScanService scanService;
 
     public ApiController(GitService gitService, ComparisonService comparisonService,
-                         ExcludeKeysService excludeKeysService, YamlService yamlService) {
+                         ExcludeKeysService excludeKeysService, YamlService yamlService,
+                         ScanService scanService) {
         this.gitService = gitService;
         this.comparisonService = comparisonService;
         this.excludeKeysService = excludeKeysService;
         this.yamlService = yamlService;
+        this.scanService = scanService;
     }
 
     /**
@@ -221,6 +225,21 @@ public class ApiController {
             }
             Files.writeString(filePath, patched, StandardCharsets.UTF_8);
             return ResponseEntity.ok(Map.of("status", "saved"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Сканирует папку с компонентами: проверяет наличие ветки и собирает коммит-сообщения.
+     *
+     * @param request содержит путь к папке, имя ветки и (опционально) базовую ветку.
+     * @return список {@link org.example.model.ServiceScanResult} по каждому найденному репозиторию.
+     */
+    @PostMapping("/scan")
+    public ResponseEntity<?> scan(@RequestBody ScanRequest request) {
+        try {
+            return ResponseEntity.ok(scanService.scan(request.folderPath(), request.branch(), request.baseBranch()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
