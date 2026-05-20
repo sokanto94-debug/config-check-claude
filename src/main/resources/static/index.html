@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Config Comparator</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --success: #16a34a;
+            --warning: #b45309;
+            --danger: #dc2626;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+            --border: #e5e7eb;
+            --text: #111827;
+            --muted: #6b7280;
+            --mod-bg: #fffbeb;
+            --mod-border: #fcd34d;
+            --add-bg: #f0fdf4;
+            --add-border: #86efac;
+            --rem-bg: #fef2f2;
+            --rem-border: #fca5a5;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .app { max-width: 1600px; margin: 0 auto; padding: 24px; }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .header h1 { font-size: 1.5rem; font-weight: 700; }
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            background: #f3f4f6;
+            border: 1px solid var(--border);
+            color: var(--muted);
+        }
+        .status-pill.connected { background: var(--add-bg); border-color: var(--add-border); color: var(--success); }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; }
+        .status-pill.connected .status-dot { background: var(--success); }
+
+        /* Cards */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 14px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-weight: 600;
+            user-select: none;
+        }
+        .card-header:hover { background: #fafafa; }
+
+        .card-body {
+            padding: 20px;
+            border-top: 1px solid var(--border);
+        }
+        .card-body.collapsed { display: none; }
+
+        /* Forms */
+        .form-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .form-row:last-child { margin-bottom: 0; }
+
+        input[type="text"], input[type="password"], select {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 7px 12px;
+            font-size: 0.875rem;
+            outline: none;
+            transition: border-color 0.15s;
+            background: white;
+        }
+        input[type="text"]:focus, input[type="password"]:focus, select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+        }
+        .input-lg { min-width: 340px; flex: 1; }
+        .input-md { width: 260px; }
+
+        /* Buttons */
+        .btn {
+            padding: 7px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+        .btn-secondary { background: white; color: var(--text); border: 1px solid var(--border); }
+        .btn-secondary:hover:not(:disabled) { background: #f9fafb; }
+        .btn-compare {
+            padding: 11px 28px;
+            font-size: 1rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.15s;
+            box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+        }
+        .btn-compare:hover { background: var(--primary-hover); box-shadow: 0 4px 12px rgba(37,99,235,0.35); }
+
+        /* Message */
+        .msg {
+            font-size: 0.8rem;
+            padding: 4px 10px;
+            border-radius: 6px;
+        }
+        .msg.error { color: var(--danger); background: var(--rem-bg); }
+        .msg.success { color: var(--success); background: var(--add-bg); }
+
+        /* Comparison panel */
+        .cmp-grid {
+            display: grid;
+            grid-template-columns: 1fr 160px 1fr;
+            gap: 20px;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .contour {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .contour-title {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+        }
+
+        .contour label {
+            font-size: 0.8rem;
+            color: var(--muted);
+            margin-bottom: -4px;
+        }
+
+        .contour select { width: 100%; }
+
+        .cmp-mid {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .vs-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        /* Chevron */
+        .chevron {
+            width: 18px;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--muted);
+            transition: transform 0.2s;
+            font-size: 0.6rem;
+            flex-shrink: 0;
+        }
+        .chevron.open { transform: rotate(90deg); }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+        .badge-MODIFIED { background: var(--mod-bg); color: var(--warning); border: 1px solid var(--mod-border); }
+        .badge-ADDED    { background: var(--add-bg); color: var(--success); border: 1px solid var(--add-border); }
+        .badge-REMOVED  { background: var(--rem-bg); color: var(--danger);  border: 1px solid var(--rem-border); }
+        .badge-SAME     { background: #f9fafb; color: var(--muted); border: 1px solid var(--border); }
+
+        /* Summary */
+        .summary {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 14px 20px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 12px;
+        }
+        .summary-title { font-weight: 600; flex: 1; min-width: 150px; }
+        .show-same-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: var(--muted);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        /* Service accordion */
+        .service-item {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 8px;
+            overflow: hidden;
+        }
+
+        .service-header {
+            padding: 12px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            user-select: none;
+        }
+        .service-header:hover { background: #fafafa; }
+        .service-name { font-weight: 600; flex: 1; }
+        .service-body { border-top: 1px solid var(--border); }
+        .service-body.collapsed { display: none; }
+
+        /* File accordion */
+        .file-item { border-bottom: 1px solid #f3f4f6; }
+        .file-item:last-child { border-bottom: none; }
+
+        .file-header {
+            padding: 9px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fafafa;
+            user-select: none;
+        }
+        .file-header:hover { background: #f3f4f6; }
+        .file-name { font-family: 'Menlo', 'Consolas', monospace; font-size: 0.82rem; flex: 1; }
+        .file-body { }
+        .file-body.collapsed { display: none; }
+
+        /* Diff table */
+        .diff-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .diff-table th {
+            padding: 7px 16px;
+            text-align: left;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--muted);
+            background: #f9fafb;
+            border-bottom: 1px solid var(--border);
+        }
+        .diff-table td {
+            padding: 7px 16px;
+            border-bottom: 1px solid #f9fafb;
+            vertical-align: top;
+        }
+        .diff-table tr:last-child td { border-bottom: none; }
+
+        .row-MODIFIED { background: var(--mod-bg); }
+        .row-ADDED    { background: var(--add-bg); }
+        .row-REMOVED  { background: var(--rem-bg); }
+        .row-SAME     { background: white; }
+        .row-SAME.hidden { display: none; }
+
+        .key-cell {
+            font-family: 'Menlo', 'Consolas', monospace;
+            font-size: 0.82rem;
+            max-width: 340px;
+            word-break: break-all;
+        }
+        .val-cell {
+            font-family: 'Menlo', 'Consolas', monospace;
+            font-size: 0.82rem;
+            max-width: 340px;
+            word-break: break-all;
+        }
+        .val-left  { color: #b91c1c; }
+        .val-right { color: #15803d; }
+        .val-null  { color: #9ca3af; font-style: italic; font-family: system-ui; }
+
+        /* Misc */
+        .only-notice {
+            padding: 10px 20px;
+            font-size: 0.85rem;
+        }
+        .only-notice.added   { color: var(--success); }
+        .only-notice.removed { color: var(--danger); }
+
+        .loading {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--muted);
+        }
+        .spinner {
+            display: inline-block;
+            width: 22px;
+            height: 22px;
+            border: 3px solid #e5e7eb;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.75s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .hidden { display: none; }
+
+        /* Exclude keys */
+        .exclude-row {
+            padding: 10px 20px 14px;
+            border-top: 1px solid var(--border);
+        }
+        .exclude-row details > summary {
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            list-style: none;
+        }
+        .exclude-row details > summary::-webkit-details-marker { display: none; }
+        .exclude-row details > summary::before {
+            content: '▶';
+            font-size: 0.55rem;
+            transition: transform 0.2s;
+            display: inline-block;
+        }
+        .exclude-row details[open] > summary::before { transform: rotate(90deg); }
+
+        .keys-hint {
+            display: block;
+            margin-top: 8px;
+            font-size: 0.82rem;
+            color: var(--muted);
+        }
+        .keys-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+            max-height: 180px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .key-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 8px 4px 6px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: white;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .key-item:hover { border-color: #93c5fd; }
+        .key-item.pinned { border-color: var(--primary); background: rgba(37,99,235,0.06); }
+        .key-item input[type="checkbox"] { accent-color: var(--primary); width: 13px; height: 13px; cursor: pointer; }
+        .key-name { font-family: 'Menlo','Consolas',monospace; }
+        .pin-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            font-size: 0.8rem;
+            opacity: 0.25;
+            line-height: 1;
+            transition: opacity 0.15s;
+            flex-shrink: 0;
+        }
+        .pin-btn:hover { opacity: 0.7; }
+        .pin-btn.active { opacity: 1; }
+
+        /* Tabs */
+        .tabs-bar {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 16px;
+        }
+        .tab-btn {
+            padding: 8px 20px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: white;
+            color: var(--muted);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .tab-btn:hover { background: #f9fafb; color: var(--text); }
+        .tab-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        /* Services checklist */
+        .services-checklist { margin: 8px 0 12px; }
+        .checklist-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 6px;
+        }
+        .check-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            user-select: none;
+            background: white;
+            transition: all 0.15s;
+        }
+        .check-item:hover { border-color: var(--primary); background: rgba(37,99,235,0.04); }
+        .check-item input[type="checkbox"] { accent-color: var(--primary); width: 14px; height: 14px; }
+
+        @media (max-width: 768px) {
+            .cmp-grid { grid-template-columns: 1fr; }
+            .cmp-mid { flex-direction: row; }
+            .input-lg { min-width: 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+
+    <!-- Header -->
+    <div class="header">
+        <h1>Config Comparator</h1>
+        <div class="status-pill" id="statusPill">
+            <span class="status-dot"></span>
+            <span id="statusText">Не настроено</span>
+        </div>
+    </div>
+
+    <!-- Repo Settings -->
+    <div class="card">
+        <div class="card-header" onclick="toggleCard('repoBody', this)">
+            <span>Репозиторий</span>
+            <span class="chevron open">▶</span>
+        </div>
+        <div class="card-body" id="repoBody">
+            <div class="form-row">
+                <input type="text" id="repoInput" class="input-lg"
+                       placeholder="Git URL (https://...) или локальный путь (C:\repos\configs)">
+                <input type="password" id="repoToken" class="input-md"
+                       placeholder="Токен (необязательно)">
+            </div>
+            <div class="form-row">
+                <button class="btn btn-primary" onclick="configureRepo()">Подключить</button>
+                <button class="btn btn-secondary" id="fetchBtn" onclick="fetchRepo()" disabled>
+                    Обновить ветки
+                </button>
+                <span id="repoMsg" class="msg"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mode tabs -->
+    <div class="tabs-bar">
+        <button class="tab-btn active" id="tabCross" onclick="switchTab('cross')">Сравнение контуров</button>
+        <button class="tab-btn" id="tabIntra" onclick="switchTab('intra')">Сравнение микросервисов</button>
+    </div>
+
+    <!-- Cross-branch comparison -->
+    <div id="crossPanel" class="card">
+        <div class="cmp-grid">
+            <div class="contour">
+                <div class="contour-title">Левый контур</div>
+                <label>Ветка</label>
+                <select id="leftBranch" onchange="loadSystems('left')">
+                    <option value="">— выберите —</option>
+                </select>
+                <label>Система</label>
+                <select id="leftSystem" onchange="loadExcludeKeys()">
+                    <option value="">— выберите —</option>
+                </select>
+            </div>
+
+            <div class="cmp-mid">
+                <span class="vs-label">vs</span>
+                <button class="btn-compare" onclick="compare()">Сравнить →</button>
+            </div>
+
+            <div class="contour">
+                <div class="contour-title">Правый контур</div>
+                <label>Ветка</label>
+                <select id="rightBranch" onchange="loadSystems('right')">
+                    <option value="">— выберите —</option>
+                </select>
+                <label>Система</label>
+                <select id="rightSystem">
+                    <option value="">— выберите —</option>
+                </select>
+            </div>
+        </div>
+        <div class="exclude-row">
+            <details id="excludeDetails">
+                <summary>
+                    ИСКЛЮЧИТЬ КЛЮЧИ
+                    <span id="excludeCountBadge" class="badge badge-MODIFIED" style="display:none">0</span>
+                </summary>
+                <div id="excludeKeysList">
+                    <span class="keys-hint">Выберите ветку и систему (левый контур) для загрузки ключей</span>
+                </div>
+            </details>
+        </div>
+    </div>
+
+    <!-- Within-branch comparison -->
+    <div id="intraPanel" class="card hidden">
+        <div class="card-body">
+            <div class="form-row">
+                <div style="display:flex;flex-direction:column;gap:6px;min-width:200px">
+                    <span class="contour-title">Ветка</span>
+                    <select id="intraBranch" onchange="loadIntraSystems()" style="width:100%">
+                        <option value="">— выберите —</option>
+                    </select>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;min-width:200px">
+                    <span class="contour-title">Система</span>
+                    <select id="intraSystem" onchange="loadIntraServices()" style="width:100%">
+                        <option value="">— выберите —</option>
+                    </select>
+                </div>
+            </div>
+            <div id="intraServicesList" class="services-checklist hidden"></div>
+            <div id="intraBtnRow" class="form-row hidden">
+                <button class="btn btn-secondary" onclick="toggleAllIntraServices(true)">Выбрать все</button>
+                <button class="btn btn-secondary" onclick="toggleAllIntraServices(false)">Сбросить</button>
+                <button class="btn-compare" onclick="compareIntra()">Сравнить →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div id="results"></div>
+
+</div>
+<script>
+    let showSame = false;
+    let permanentKeys = new Set();
+
+    // ── Init ──────────────────────────────────────────────
+    async function init() {
+        try { await api('/api/repo/reset', 'POST', {}); } catch (_) {}
+        try {
+            const keys = await api('/api/exclude-keys');
+            permanentKeys = new Set(keys);
+        } catch (_) {}
+    }
+
+    // ── Repo ──────────────────────────────────────────────
+    async function configureRepo() {
+        clearMsg('repoMsg');
+        const raw = v('repoInput');
+        const token = v('repoToken');
+        if (!raw) { showMsg('repoMsg', 'Введите URL или путь', 'error'); return; }
+
+        const isUrl = /^(https?:\/\/|git@|ssh:\/\/)/.test(raw);
+        const body = {
+            url: isUrl ? raw : null,
+            token: token || null,
+            localPath: isUrl ? null : raw
+        };
+
+        try {
+            const r = await api('/api/repo/configure', 'POST', body);
+            if (r.error) throw new Error(r.error);
+            setConnected(true);
+            showMsg('repoMsg', 'Подключено', 'success');
+            await loadBranches();
+        } catch (e) {
+            setConnected(false);
+            showMsg('repoMsg', e.message, 'error');
+        }
+    }
+
+    async function fetchRepo() {
+        clearMsg('repoMsg');
+        try {
+            await api('/api/repo/fetch', 'POST', {});
+            showMsg('repoMsg', 'Ветки обновлены', 'success');
+            await loadBranches();
+        } catch (e) {
+            showMsg('repoMsg', e.message, 'error');
+        }
+    }
+
+    async function loadBranches() {
+        try {
+            const branches = await api('/api/branches');
+            const opts = '<option value="">— выберите —</option>' +
+                branches.map(b => `<option value="${x(b)}">${x(b)}</option>`).join('');
+            el('leftBranch').innerHTML = opts;
+            el('rightBranch').innerHTML = opts;
+            el('intraBranch').innerHTML = opts;
+        } catch (e) {
+            showMsg('repoMsg', e.message, 'error');
+        }
+    }
+
+    async function loadSystems(side) {
+        const branch = el(side + 'Branch').value;
+        const systemSel = el(side + 'System');
+        systemSel.innerHTML = '<option value="">— загрузка... —</option>';
+        if (!branch) { systemSel.innerHTML = '<option value="">— выберите —</option>'; return; }
+        try {
+            const systems = await api('/api/systems?branch=' + enc(branch));
+            systemSel.innerHTML = '<option value="">— выберите —</option>' +
+                systems.map(s => `<option value="${x(s)}">${x(s)}</option>`).join('');
+        } catch (e) {
+            systemSel.innerHTML = '<option value="">Ошибка загрузки</option>';
+        }
+        if (side === 'left') loadExcludeKeys();
+    }
+
+    // ── Compare ───────────────────────────────────────────
+    async function compare() {
+        const left  = { branch: el('leftBranch').value,  system: el('leftSystem').value };
+        const right = { branch: el('rightBranch').value, system: el('rightSystem').value };
+
+        if (!left.branch || !left.system || !right.branch || !right.system) {
+            alert('Выберите ветку и систему для обоих контуров');
+            return;
+        }
+
+        const excludeKeys = [...document.querySelectorAll('.excl-key:checked')].map(cb => cb.value);
+
+        el('results').innerHTML = '<div class="loading"><span class="spinner"></span>Сравниваем конфигурации...</div>';
+
+        try {
+            const data = await api('/api/compare', 'POST', { left, right, excludeKeys });
+            if (data.error) throw new Error(data.error);
+            renderResults(data);
+        } catch (e) {
+            el('results').innerHTML = `<div class="loading" style="color:var(--danger)">Ошибка: ${x(e.message)}</div>`;
+        }
+    }
+
+    // ── Render ────────────────────────────────────────────
+    function renderResults(data) {
+        showSame = false;
+
+        const summary = `
+            <div class="summary">
+                <span class="summary-title">
+                    ${x(data.left.branch)} / ${x(data.left.system)}
+                    &nbsp;→&nbsp;
+                    ${x(data.right.branch)} / ${x(data.right.system)}
+                    &nbsp;·&nbsp; ${data.services.length} микросервисов
+                </span>
+                <span class="badge badge-MODIFIED">${data.totalModified} изменено</span>
+                <span class="badge badge-ADDED">${data.totalAdded} добавлено</span>
+                <span class="badge badge-REMOVED">${data.totalRemoved} удалено</span>
+                <span class="badge badge-SAME">${data.totalSame} одинаково</span>
+                <label class="show-same-label">
+                    <input type="checkbox" id="showSameCheck" onchange="toggleSameRows(this.checked)">
+                    Показать одинаковые параметры
+                </label>
+            </div>`;
+
+        const services = data.services.map(renderService).join('');
+        el('results').innerHTML = summary + services;
+    }
+
+    function renderService(svc) {
+        const id = 'svc_' + svc.name.replace(/[^a-zA-Z0-9]/g, '_');
+        const autoOpen = svc.status !== 'SAME';
+
+        let body = '';
+        if (svc.status === 'ADDED') {
+            body = `<div class="only-notice added">Микросервис отсутствует в левом контуре</div>`;
+        } else if (svc.status === 'REMOVED') {
+            body = `<div class="only-notice removed">Микросервис отсутствует в правом контуре</div>`;
+        } else {
+            body = svc.files.map(renderFile).join('');
+        }
+
+        return `
+        <div class="service-item">
+            <div class="service-header" onclick="toggle('${id}', this)">
+                <span class="chevron ${autoOpen ? 'open' : ''}">▶</span>
+                <span class="service-name">${x(svc.name)}</span>
+                <span class="badge badge-${svc.status}">${statusLabel(svc.status)}</span>
+            </div>
+            <div class="service-body ${autoOpen ? '' : 'collapsed'}" id="${id}">
+                ${body}
+            </div>
+        </div>`;
+    }
+
+    function renderFile(file) {
+        const id = 'f_' + Math.random().toString(36).slice(2, 9);
+        const autoOpen = file.status !== 'SAME';
+
+        let body = '';
+        if (file.status === 'ADDED') {
+            body = `<div class="only-notice added">Файл отсутствует в левом контуре</div>`;
+        } else if (file.status === 'REMOVED') {
+            body = `<div class="only-notice removed">Файл отсутствует в правом контуре</div>`;
+        } else {
+            const rows = file.diffs.map(d => {
+                const isSame = d.type === 'SAME';
+                const hiddenCls = isSame && !showSame ? ' hidden' : '';
+                const sameCls = isSame ? ' same-row' : '';
+                const lv = d.leftValue  === null ? `<span class="val-null">—</span>` : `<span class="val-left">${x(d.leftValue)}</span>`;
+                const rv = d.rightValue === null ? `<span class="val-null">—</span>` : `<span class="val-right">${x(d.rightValue)}</span>`;
+                return `<tr class="row-${d.type}${sameCls}${hiddenCls}">
+                    <td class="key-cell">${x(d.key)}</td>
+                    <td class="val-cell">${lv}</td>
+                    <td class="val-cell">${rv}</td>
+                    <td><span class="badge badge-${d.type}">${statusLabel(d.type)}</span></td>
+                </tr>`;
+            }).join('');
+
+            body = `<table class="diff-table">
+                <thead><tr>
+                    <th>Параметр</th>
+                    <th>Левый контур</th>
+                    <th>Правый контур</th>
+                    <th>Статус</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+        }
+
+        return `
+        <div class="file-item">
+            <div class="file-header" onclick="toggle('${id}', this)">
+                <span class="chevron ${autoOpen ? 'open' : ''}">▶</span>
+                <span class="file-name">${x(file.fileName)}</span>
+                <span class="badge badge-${file.status}">${statusLabel(file.status)}</span>
+            </div>
+            <div class="file-body ${autoOpen ? '' : 'collapsed'}" id="${id}">
+                ${body}
+            </div>
+        </div>`;
+    }
+
+    // ── UI helpers ────────────────────────────────────────
+    function toggle(id, header) {
+        const body = document.getElementById(id);
+        const chevron = header.querySelector('.chevron');
+        body.classList.toggle('collapsed');
+        chevron.classList.toggle('open');
+    }
+
+    function toggleCard(id, header) {
+        document.getElementById(id).classList.toggle('collapsed');
+        header.querySelector('.chevron').classList.toggle('open');
+    }
+
+    function toggleSameRows(show) {
+        showSame = show;
+        document.querySelectorAll('.same-row').forEach(r => r.classList.toggle('hidden', !show));
+    }
+
+    function setConnected(ok) {
+        const pill = el('statusPill');
+        el('statusText').textContent = ok ? 'Подключено' : 'Не настроено';
+        pill.className = 'status-pill' + (ok ? ' connected' : '');
+        el('fetchBtn').disabled = !ok;
+    }
+
+    function showMsg(id, text, type) {
+        const e = el(id);
+        e.textContent = text;
+        e.className = 'msg ' + type;
+    }
+    function clearMsg(id) { const e = el(id); e.textContent = ''; e.className = 'msg'; }
+
+    function statusLabel(s) {
+        return { MODIFIED: 'Изменено', ADDED: 'Добавлено', REMOVED: 'Удалено', SAME: 'Одинаково' }[s] || s;
+    }
+
+    // ── API ───────────────────────────────────────────────
+    async function api(url, method = 'GET', body = null) {
+        const opts = { method, headers: { 'Content-Type': 'application/json' } };
+        if (body !== null) opts.body = JSON.stringify(body);
+        const resp = await fetch(url, opts);
+        const text = await resp.text();
+        if (!resp.ok) {
+            let msg = text;
+            try { msg = JSON.parse(text).error || text; } catch (_) {}
+            throw new Error(msg || `HTTP ${resp.status}`);
+        }
+        return text ? JSON.parse(text) : {};
+    }
+
+    // ── Utils ─────────────────────────────────────────────
+    const el  = id => document.getElementById(id);
+    const v   = id => el(id).value.trim();
+    const enc = s  => encodeURIComponent(s);
+    function x(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Exclude keys ──────────────────────────────────────
+    async function loadExcludeKeys() {
+        const branch = el('leftBranch').value;
+        const system = el('leftSystem').value;
+        const listDiv = el('excludeKeysList');
+        updateExcludeCount();
+        if (!branch || !system) {
+            listDiv.innerHTML = '<span class="keys-hint">Выберите ветку и систему (левый контур) для загрузки ключей</span>';
+            return;
+        }
+        listDiv.innerHTML = '<span class="keys-hint">Загрузка...</span>';
+        try {
+            const keys = await api('/api/keys?branch=' + enc(branch) + '&system=' + enc(system));
+            renderExcludeKeys(keys);
+        } catch(e) {
+            listDiv.innerHTML = `<span class="keys-hint" style="color:var(--danger)">Ошибка: ${x(e.message)}</span>`;
+        }
+    }
+
+    function renderExcludeKeys(keys) {
+        const listDiv = el('excludeKeysList');
+        if (!keys.length) { listDiv.innerHTML = '<span class="keys-hint">Ключей не найдено</span>'; return; }
+        listDiv.innerHTML = '<div class="keys-grid">' +
+            keys.map(k => {
+                const isPerm = permanentKeys.has(k);
+                return `<label class="key-item${isPerm ? ' pinned' : ''}">
+                    <input type="checkbox" class="excl-key" value="${x(k)}" ${isPerm ? 'checked' : ''}
+                        onchange="updateExcludeCount()">
+                    <span class="key-name">${x(k)}</span>
+                    <button type="button" class="pin-btn${isPerm ? ' active' : ''}"
+                        onclick="togglePin('${x(k)}',this,event)" title="Постоянное исключение">📌</button>
+                </label>`;
+            }).join('') +
+            '</div>';
+        updateExcludeCount();
+    }
+
+    async function togglePin(key, btn, event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (permanentKeys.has(key)) permanentKeys.delete(key);
+        else permanentKeys.add(key);
+        const isPerm = permanentKeys.has(key);
+        const label = btn.closest('.key-item');
+        const cb = label.querySelector('input');
+        btn.classList.toggle('active', isPerm);
+        label.classList.toggle('pinned', isPerm);
+        if (isPerm) cb.checked = true;
+        updateExcludeCount();
+        try { await api('/api/exclude-keys', 'POST', [...permanentKeys]); } catch (_) {}
+    }
+
+    function updateExcludeCount() {
+        const count = document.querySelectorAll('.excl-key:checked').length;
+        const badge = el('excludeCountBadge');
+        badge.textContent = count;
+        badge.style.display = count > 0 ? '' : 'none';
+    }
+
+    // ── Tab switching ──────────────────────────────────────
+    function switchTab(mode) {
+        const isCross = mode === 'cross';
+        el('crossPanel').classList.toggle('hidden', !isCross);
+        el('intraPanel').classList.toggle('hidden', isCross);
+        el('tabCross').classList.toggle('active', isCross);
+        el('tabIntra').classList.toggle('active', !isCross);
+        el('results').innerHTML = '';
+    }
+
+    // ── Within-branch compare ──────────────────────────────
+    async function loadIntraSystems() {
+        const branch = el('intraBranch').value;
+        const sel = el('intraSystem');
+        el('intraServicesList').classList.add('hidden');
+        el('intraBtnRow').classList.add('hidden');
+        sel.innerHTML = '<option value="">— выберите —</option>';
+        if (!branch) return;
+        try {
+            const systems = await api('/api/systems?branch=' + enc(branch));
+            sel.innerHTML = '<option value="">— выберите —</option>' +
+                systems.map(s => `<option value="${x(s)}">${x(s)}</option>`).join('');
+        } catch (e) {
+            sel.innerHTML = '<option value="">Ошибка загрузки</option>';
+        }
+    }
+
+    async function loadIntraServices() {
+        const branch = el('intraBranch').value;
+        const system = el('intraSystem').value;
+        const listDiv = el('intraServicesList');
+        el('intraBtnRow').classList.add('hidden');
+        listDiv.innerHTML = '';
+        listDiv.classList.add('hidden');
+        if (!branch || !system) return;
+        try {
+            const services = await api('/api/microservices?branch=' + enc(branch) + '&system=' + enc(system));
+            if (services.length === 0) {
+                listDiv.innerHTML = '<p style="color:var(--muted);font-size:0.85rem">Нет микросервисов</p>';
+                listDiv.classList.remove('hidden');
+                return;
+            }
+            listDiv.innerHTML = '<span class="contour-title">Микросервисы для сравнения</span>' +
+                '<div class="checklist-grid">' +
+                services.map(s => `<label class="check-item">
+                    <input type="checkbox" name="intraService" value="${x(s)}" checked>
+                    <span>${x(s)}</span>
+                </label>`).join('') +
+                '</div>';
+            listDiv.classList.remove('hidden');
+            el('intraBtnRow').classList.remove('hidden');
+        } catch (e) {
+            listDiv.innerHTML = `<p style="color:var(--danger);font-size:0.85rem">Ошибка: ${x(e.message)}</p>`;
+            listDiv.classList.remove('hidden');
+        }
+    }
+
+    function toggleAllIntraServices(checked) {
+        document.querySelectorAll('input[name="intraService"]').forEach(cb => cb.checked = checked);
+    }
+
+    async function compareIntra() {
+        const branch = el('intraBranch').value;
+        const system = el('intraSystem').value;
+        if (!branch || !system) { alert('Выберите ветку и систему'); return; }
+        const microservices = [...document.querySelectorAll('input[name="intraService"]:checked')]
+            .map(cb => cb.value);
+        if (microservices.length < 2) { alert('Выберите хотя бы 2 микросервиса'); return; }
+
+        el('results').innerHTML = '<div class="loading"><span class="spinner"></span>Сравниваем микросервисы...</div>';
+        try {
+            const data = await api('/api/compare/services', 'POST', { branch, system, microservices });
+            if (data.error) throw new Error(data.error);
+            renderMultiResults(data);
+        } catch (e) {
+            el('results').innerHTML = `<div class="loading" style="color:var(--danger)">Ошибка: ${x(e.message)}</div>`;
+        }
+    }
+
+    // ── Multi-compare render ───────────────────────────────
+    function renderMultiResults(data) {
+        showSame = false;
+        const totalProps = data.files.reduce((a, f) => a + f.properties.length, 0);
+        const diffProps  = data.files.reduce((a, f) => a + f.properties.filter(p => !p.allSame).length, 0);
+
+        const summary = `
+            <div class="summary">
+                <span class="summary-title">
+                    ${x(data.branch)} / ${x(data.system)}
+                    &nbsp;·&nbsp; ${data.microservices.length} микросервисов
+                </span>
+                <span class="badge badge-MODIFIED">${diffProps} отличается</span>
+                <span class="badge badge-SAME">${totalProps - diffProps} одинаково</span>
+                <label class="show-same-label">
+                    <input type="checkbox" id="showSameCheck" onchange="toggleSameRows(this.checked)">
+                    Показать одинаковые параметры
+                </label>
+            </div>`;
+
+        const files = data.files.map(f => renderMultiFile(f, data.microservices)).join('');
+        el('results').innerHTML = summary + (files || '<div class="loading" style="color:var(--muted)">Нет общих файлов с общими параметрами</div>');
+    }
+
+    function renderMultiFile(file, svcs) {
+        const id = 'mf_' + Math.random().toString(36).slice(2, 9);
+        const autoOpen = file.hasChanges;
+
+        const thSvcs = svcs.map(s => `<th>${x(s)}</th>`).join('');
+        const rows = file.properties.map(p => {
+            const isSame = p.allSame;
+            const hiddenCls = isSame && !showSame ? ' hidden' : '';
+            const sameCls   = isSame ? ' same-row' : '';
+            const rowType   = isSame ? 'SAME' : 'MODIFIED';
+            const cells = svcs.map(s => {
+                const val = p.values[s];
+                const disp = (val !== undefined && val !== null)
+                    ? `<span class="${isSame ? 'val-right' : ''}">${x(val)}</span>`
+                    : `<span class="val-null">—</span>`;
+                return `<td class="val-cell">${disp}</td>`;
+            }).join('');
+            return `<tr class="row-${rowType}${sameCls}${hiddenCls}">
+                <td class="key-cell">${x(p.key)}</td>
+                ${cells}
+                <td><span class="badge badge-${rowType}">${isSame ? 'Одинаково' : 'Отличается'}</span></td>
+            </tr>`;
+        }).join('');
+
+        const body = `<table class="diff-table">
+            <thead><tr>
+                <th>Параметр</th>${thSvcs}<th>Статус</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+
+        return `
+        <div class="service-item">
+            <div class="service-header" onclick="toggle('${id}', this)">
+                <span class="chevron ${autoOpen ? 'open' : ''}">▶</span>
+                <span class="service-name">${x(file.fileName)}</span>
+                <span class="badge badge-${file.hasChanges ? 'MODIFIED' : 'SAME'}">${file.hasChanges ? 'Отличается' : 'Одинаково'}</span>
+            </div>
+            <div class="service-body ${autoOpen ? '' : 'collapsed'}" id="${id}">
+                ${body}
+            </div>
+        </div>`;
+    }
+
+    init();
+</script>
+</body>
+</html>

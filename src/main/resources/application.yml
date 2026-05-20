@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: config-compare
+
+server:
+  port: 8081
