@@ -226,6 +226,28 @@ public class GitService {
     }
 
     /**
+     * Возвращает {@code true}, если репозиторий открыт как локальный (не клонирован из URL).
+     * Только для локальных репозиториев доступно редактирование файлов на диске.
+     */
+    public boolean isLocalRepo() {
+        return settings != null && settings.localPath() != null && !settings.localPath().isBlank();
+    }
+
+    /**
+     * Возвращает абсолютный путь к файлу на диске по его относительному пути в репозитории.
+     *
+     * @param relativeFilePath относительный путь (например, {@code 15_10/login/application.yaml}).
+     * @return абсолютный {@link Path} к файлу.
+     * @throws IllegalStateException если репозиторий не является локальным.
+     */
+    public java.nio.file.Path resolveLocalFilePath(String relativeFilePath) {
+        if (!isLocalRepo()) {
+            throw new IllegalStateException("Редактирование доступно только для локального репозитория");
+        }
+        return java.nio.file.Path.of(settings.localPath()).resolve(relativeFilePath);
+    }
+
+    /**
      * Сбрасывает подключение к репозиторию и очищает настройки.
      *
      * <p>Вызывается при загрузке страницы, чтобы предотвратить использование

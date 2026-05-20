@@ -4,9 +4,13 @@ import org.example.model.*;
 import org.example.service.ComparisonService;
 import org.example.service.ExcludeKeysService;
 import org.example.service.GitService;
+import org.example.service.YamlService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,11 +39,14 @@ public class ApiController {
     private final GitService gitService;
     private final ComparisonService comparisonService;
     private final ExcludeKeysService excludeKeysService;
+    private final YamlService yamlService;
 
-    public ApiController(GitService gitService, ComparisonService comparisonService, ExcludeKeysService excludeKeysService) {
+    public ApiController(GitService gitService, ComparisonService comparisonService,
+                         ExcludeKeysService excludeKeysService, YamlService yamlService) {
         this.gitService = gitService;
         this.comparisonService = comparisonService;
         this.excludeKeysService = excludeKeysService;
+        this.yamlService = yamlService;
     }
 
     /**
@@ -61,11 +68,11 @@ public class ApiController {
     /**
      * Возвращает текущий статус подключения к репозиторию.
      *
-     * @return {@code {"configured": true/false}}.
+     * @return {@code {"configured": true/false, "localRepo": true/false}}.
      */
     @GetMapping("/repo/status")
     public Map<String, Object> status() {
-        return Map.of("configured", gitService.isConfigured());
+        return Map.of("configured", gitService.isConfigured(), "localRepo", gitService.isLocalRepo());
     }
 
     /**
@@ -186,6 +193,33 @@ public class ApiController {
     public ResponseEntity<?> saveExcludeKeys(@RequestBody List<String> keys) {
         try {
             excludeKeysService.save(keys);
+            return ResponseEntity.ok(Map.of("status", "saved"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Редактирует значение одного параметра в YAML-файле на диске.
+     *
+     * <p>Доступно только для локального репозитория. Форматирование файла сохраняется:
+     * изменяется только строка с целевым ключом.</p>
+     *
+     * @param request содержит относительный путь к файлу, ключ и новое значение.
+     * @return {@code {"status": "saved"}} при успехе или {@code {"error": "..."}} при ошибке.
+     */
+    @PostMapping("/file/edit")
+    public ResponseEntity<?> editFile(@RequestBody EditRequest request) {
+        try {
+            Path filePath = gitService.resolveLocalFilePath(request.filePath());
+            String content = Files.readString(filePath, StandardCharsets.UTF_8);
+            String patched = yamlService.patchKey(content, request.key(), request.newValue());
+            if (patched.equals(content)) {
+                return ResponseEntity.badRequest().body(Map.of("error",
+                        "Ключ «" + request.key() + "» не найден в файле на диске. " +
+                        "Убедитесь, что нужная ветка выгружена в рабочую директорию."));
+            }
+            Files.writeString(filePath, patched, StandardCharsets.UTF_8);
             return ResponseEntity.ok(Map.of("status", "saved"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

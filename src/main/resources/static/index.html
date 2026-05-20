@@ -475,6 +475,33 @@
         .check-item:hover { border-color: var(--primary); background: rgba(37,99,235,0.04); }
         .check-item input[type="checkbox"] { accent-color: var(--primary); width: 14px; height: 14px; }
 
+        /* Inline editing */
+        .editable-cell { cursor: text; }
+        .editable-cell:hover { background: rgba(37,99,235,0.05); }
+        .edit-wrap { display: flex; align-items: center; gap: 3px; }
+        .edit-input {
+            font-family: 'Menlo', 'Consolas', monospace;
+            font-size: 0.82rem;
+            border: 1px solid var(--primary);
+            border-radius: 4px;
+            padding: 2px 6px;
+            flex: 1;
+            min-width: 60px;
+            outline: none;
+        }
+        .edit-ok, .edit-cancel {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0 3px;
+            font-size: 1rem;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .edit-ok { color: var(--success); }
+        .edit-cancel { color: var(--danger); }
+        .val-saved { color: #7c3aed; font-style: italic; }
+
         @media (max-width: 768px) {
             .cmp-grid { grid-template-columns: 1fr; }
             .cmp-mid { flex-direction: row; }
@@ -601,6 +628,7 @@
 <script>
     let showSame = false;
     let permanentKeys = new Set();
+    let isLocalRepo = false;
 
     // ── Init ──────────────────────────────────────────────
     async function init() {
@@ -628,6 +656,7 @@
         try {
             const r = await api('/api/repo/configure', 'POST', body);
             if (r.error) throw new Error(r.error);
+            isLocalRepo = !isUrl;
             setConnected(true);
             showMsg('repoMsg', 'Подключено', 'success');
             await loadBranches();
@@ -721,11 +750,11 @@
                 </label>
             </div>`;
 
-        const services = data.services.map(renderService).join('');
+        const services = data.services.map(svc => renderService(svc, data.left.system, data.right.system)).join('');
         el('results').innerHTML = summary + services;
     }
 
-    function renderService(svc) {
+    function renderService(svc, leftSystem, rightSystem) {
         const id = 'svc_' + svc.name.replace(/[^a-zA-Z0-9]/g, '_');
         const autoOpen = svc.status !== 'SAME';
 
@@ -735,7 +764,11 @@
         } else if (svc.status === 'REMOVED') {
             body = `<div class="only-notice removed">Микросервис отсутствует в правом контуре</div>`;
         } else {
-            body = svc.files.map(renderFile).join('');
+            body = svc.files.map(f => renderFile(
+                f,
+                leftSystem + '/' + svc.name + '/' + f.fileName,
+                rightSystem + '/' + svc.name + '/' + f.fileName
+            )).join('');
         }
 
         return `
@@ -751,7 +784,7 @@
         </div>`;
     }
 
-    function renderFile(file) {
+    function renderFile(file, leftFilePath, rightFilePath) {
         const id = 'f_' + Math.random().toString(36).slice(2, 9);
         const autoOpen = file.status !== 'SAME';
 
@@ -761,16 +794,19 @@
         } else if (file.status === 'REMOVED') {
             body = `<div class="only-notice removed">Файл отсутствует в правом контуре</div>`;
         } else {
+            const editCls = isLocalRepo ? ' editable-cell' : '';
             const rows = file.diffs.map(d => {
                 const isSame = d.type === 'SAME';
                 const hiddenCls = isSame && !showSame ? ' hidden' : '';
                 const sameCls = isSame ? ' same-row' : '';
                 const lv = d.leftValue  === null ? `<span class="val-null">—</span>` : `<span class="val-left">${x(d.leftValue)}</span>`;
                 const rv = d.rightValue === null ? `<span class="val-null">—</span>` : `<span class="val-right">${x(d.rightValue)}</span>`;
+                const leftEdit  = isLocalRepo && d.leftValue  !== null ? `data-filepath="${x(leftFilePath)}"  data-key="${x(d.key)}" onclick="startEdit(this)"` : '';
+                const rightEdit = isLocalRepo && d.rightValue !== null ? `data-filepath="${x(rightFilePath)}" data-key="${x(d.key)}" onclick="startEdit(this)"` : '';
                 return `<tr class="row-${d.type}${sameCls}${hiddenCls}">
                     <td class="key-cell">${x(d.key)}</td>
-                    <td class="val-cell">${lv}</td>
-                    <td class="val-cell">${rv}</td>
+                    <td class="val-cell${editCls}" ${leftEdit}>${lv}</td>
+                    <td class="val-cell${editCls}" ${rightEdit}>${rv}</td>
                     <td><span class="badge badge-${d.type}">${statusLabel(d.type)}</span></td>
                 </tr>`;
             }).join('');
@@ -1015,15 +1051,16 @@
                 </label>
             </div>`;
 
-        const files = data.files.map(f => renderMultiFile(f, data.microservices)).join('');
+        const files = data.files.map(f => renderMultiFile(f, data.microservices, data.system)).join('');
         el('results').innerHTML = summary + (files || '<div class="loading" style="color:var(--muted)">Нет общих файлов с общими параметрами</div>');
     }
 
-    function renderMultiFile(file, svcs) {
+    function renderMultiFile(file, svcs, system) {
         const id = 'mf_' + Math.random().toString(36).slice(2, 9);
         const autoOpen = file.hasChanges;
 
         const thSvcs = svcs.map(s => `<th>${x(s)}</th>`).join('');
+        const editCls = isLocalRepo ? ' editable-cell' : '';
         const rows = file.properties.map(p => {
             const isSame = p.allSame;
             const hiddenCls = isSame && !showSame ? ' hidden' : '';
@@ -1031,10 +1068,13 @@
             const rowType   = isSame ? 'SAME' : 'MODIFIED';
             const cells = svcs.map(s => {
                 const val = p.values[s];
+                const filePath = system + '/' + s + '/' + file.fileName;
+                const editAttrs = isLocalRepo && val !== null && val !== undefined
+                    ? `data-filepath="${x(filePath)}" data-key="${x(p.key)}" onclick="startEdit(this)"` : '';
                 const disp = (val !== undefined && val !== null)
                     ? `<span class="${isSame ? 'val-right' : ''}">${x(val)}</span>`
                     : `<span class="val-null">—</span>`;
-                return `<td class="val-cell">${disp}</td>`;
+                return `<td class="val-cell${editCls}" ${editAttrs}>${disp}</td>`;
             }).join('');
             return `<tr class="row-${rowType}${sameCls}${hiddenCls}">
                 <td class="key-cell">${x(p.key)}</td>
@@ -1061,6 +1101,51 @@
                 ${body}
             </div>
         </div>`;
+    }
+
+    // ── Inline editing ─────────────────────────────────────
+    function startEdit(cell) {
+        if (!isLocalRepo) return;
+        const filePath = cell.dataset.filepath;
+        const key      = cell.dataset.key;
+        const span     = cell.querySelector('span');
+        if (!span || span.classList.contains('val-null')) return;
+        const original = span.textContent;
+
+        cell.innerHTML = `<div class="edit-wrap">
+            <input class="edit-input" type="text" value="${x(original)}">
+            <button class="edit-ok" title="Сохранить (Enter)">✓</button>
+            <button class="edit-cancel" title="Отмена (Esc)">✕</button>
+        </div>`;
+
+        const input  = cell.querySelector('.edit-input');
+        const okBtn  = cell.querySelector('.edit-ok');
+        const canBtn = cell.querySelector('.edit-cancel');
+
+        input.focus();
+        input.select();
+
+        const commit = async () => {
+            const newValue = input.value;
+            okBtn.disabled = canBtn.disabled = true;
+            try {
+                await api('/api/file/edit', 'POST', { filePath, key, newValue });
+                cell.innerHTML = `<span class="val-saved">${x(newValue)}</span>`;
+            } catch(e) {
+                cell.innerHTML = span.outerHTML;
+                alert('Не сохранено: ' + e.message);
+            }
+        };
+
+        const cancel = () => { cell.innerHTML = span.outerHTML; };
+
+        okBtn.onclick  = commit;
+        canBtn.onclick = cancel;
+        input.onkeydown = e => {
+            if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+        };
+        input.onclick = e => e.stopPropagation();
     }
 
     init();
