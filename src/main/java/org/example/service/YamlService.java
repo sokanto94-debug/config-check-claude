@@ -95,10 +95,15 @@ public class YamlService {
             if (depth == parts.length - 1) {
                 // Нашли целевой ключ
                 String trimmedRest = rest.trim();
-                // Пропускаем flow-коллекции и блочные скаляры
-                if (trimmedRest.isEmpty() || trimmedRest.equals("|") || trimmedRest.equals(">")
+                // Пропускаем блочные скаляры и flow-коллекции — их структура многострочная
+                if (trimmedRest.equals("|") || trimmedRest.equals(">")
                         || trimmedRest.startsWith("{") || trimmedRest.startsWith("[")) {
                     return content;
+                }
+                if (trimmedRest.isEmpty()) {
+                    // Значение null/пустое: добавляем новое значение после двоеточия
+                    lines[i] = line.stripTrailing() + " " + newValue;
+                    return String.join("\n", lines);
                 }
                 // Находим позицию начала значения в строке
                 int valueStart = line.indexOf(':') + 1;

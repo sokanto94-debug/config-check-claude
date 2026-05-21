@@ -331,6 +331,7 @@
         .val-left  { color: #b91c1c; }
         .val-right { color: #15803d; }
         .val-null  { color: #9ca3af; font-style: italic; font-family: system-ui; }
+        .presence-yes { color: #15803d; font-weight: 600; }
 
         /* Misc */
         .only-notice {
@@ -688,9 +689,13 @@
                 </div>
             </div>
             <div id="intraServicesList" class="services-checklist hidden"></div>
+            <div id="intraKeysList" class="services-checklist hidden"></div>
             <div id="intraBtnRow" class="form-row hidden">
-                <button class="btn btn-secondary" onclick="toggleAllIntraServices(true)">Выбрать все</button>
-                <button class="btn btn-secondary" onclick="toggleAllIntraServices(false)">Сбросить</button>
+                <button class="btn btn-secondary" onclick="toggleAllIntraServices(true)">Сервисы: все</button>
+                <button class="btn btn-secondary" onclick="toggleAllIntraServices(false)">Сервисы: сброс</button>
+                <button class="btn btn-secondary" onclick="toggleAllIntraKeys(true)">Ключи: все</button>
+                <button class="btn btn-secondary" onclick="toggleAllIntraKeys(false)">Ключи: сброс</button>
+                <button class="btn btn-secondary" onclick="saveIntraKeys()">Запомнить ключи</button>
                 <button class="btn-compare" onclick="compareIntra()">Сравнить →</button>
             </div>
         </div>
@@ -713,6 +718,10 @@
                     <span class="contour-title">Базовая ветка</span>
                     <input type="text" id="scanBase" placeholder="main (авто)">
                 </div>
+                <label class="check-item" style="align-self:flex-end;white-space:nowrap">
+                    <input type="checkbox" id="scanFetch">
+                    <span>git fetch перед сканированием</span>
+                </label>
                 <button class="btn-compare" onclick="runScan()" style="align-self:flex-end">Сканировать →</button>
             </div>
             <span id="scanMsg" class="msg"></span>
@@ -862,11 +871,7 @@
         } else if (svc.status === 'REMOVED') {
             body = `<div class="only-notice removed">Микросервис отсутствует в правом контуре</div>`;
         } else {
-            body = svc.files.map(f => renderFile(
-                f,
-                leftSystem + '/' + svc.name + '/' + f.fileName,
-                rightSystem + '/' + svc.name + '/' + f.fileName
-            )).join('');
+            body = svc.files.map(f => renderFile(f, f.leftPath, f.rightPath)).join('');
         }
 
         return `
@@ -892,19 +897,16 @@
         } else if (file.status === 'REMOVED') {
             body = `<div class="only-notice removed">Файл отсутствует в правом контуре</div>`;
         } else {
-            const editCls = isLocalRepo ? ' editable-cell' : '';
             const rows = file.diffs.map(d => {
                 const isSame = d.type === 'SAME';
                 const hiddenCls = isSame && !showSame ? ' hidden' : '';
                 const sameCls = isSame ? ' same-row' : '';
-                const lv = d.leftValue  === null ? `<span class="val-null">—</span>` : `<span class="val-left">${x(d.leftValue)}</span>`;
-                const rv = d.rightValue === null ? `<span class="val-null">—</span>` : `<span class="val-right">${x(d.rightValue)}</span>`;
-                const leftEdit  = isLocalRepo && d.leftValue  !== null ? `data-filepath="${x(leftFilePath)}"  data-key="${x(d.key)}" onclick="startEdit(this)"` : '';
-                const rightEdit = isLocalRepo && d.rightValue !== null ? `data-filepath="${x(rightFilePath)}" data-key="${x(d.key)}" onclick="startEdit(this)"` : '';
+                const lv = d.type !== 'ADDED'   ? `<span class="presence-yes">✓</span>` : `<span class="val-null">—</span>`;
+                const rv = d.type !== 'REMOVED' ? `<span class="presence-yes">✓</span>` : `<span class="val-null">—</span>`;
                 return `<tr class="row-${d.type}${sameCls}${hiddenCls}">
                     <td class="key-cell">${x(d.key)}</td>
-                    <td class="val-cell${editCls}" ${leftEdit}>${lv}</td>
-                    <td class="val-cell${editCls}" ${rightEdit}>${rv}</td>
+                    <td class="val-cell">${lv}</td>
+                    <td class="val-cell">${rv}</td>
                     <td><span class="badge badge-${d.type}">${statusLabel(d.type)}</span></td>
                 </tr>`;
             }).join('');
@@ -1066,6 +1068,7 @@
         const folderPath = v('scanFolder');
         const branch     = v('scanBranch');
         const baseBranch = v('scanBase') || null;
+        const fetch      = el('scanFetch').checked;
         clearMsg('scanMsg');
 
         if (!folderPath) { showMsg('scanMsg', 'Укажите папку', 'error'); return; }
@@ -1074,7 +1077,7 @@
         el('results').innerHTML = '<div class="loading"><span class="spinner"></span>Сканирование...</div>';
 
         try {
-            const data = await api('/api/scan', 'POST', { folderPath, branch, baseBranch });
+            const data = await api('/api/scan', 'POST', { folderPath, branch, baseBranch, fetch });
             if (data.error) throw new Error(data.error);
             renderScanResults(data, branch);
         } catch(e) {
@@ -1204,6 +1207,7 @@
         const branch = el('intraBranch').value;
         const system = el('intraSystem').value;
         const listDiv = el('intraServicesList');
+        el('intraKeysList').classList.add('hidden');
         el('intraBtnRow').classList.add('hidden');
         listDiv.innerHTML = '';
         listDiv.classList.add('hidden');
@@ -1223,6 +1227,25 @@
                 </label>`).join('') +
                 '</div>';
             listDiv.classList.remove('hidden');
+
+            // Загружаем ключи для фильтра
+            const keysDiv = el('intraKeysList');
+            try {
+                const [keys, savedKeys] = await Promise.all([
+                    api('/api/keys?branch=' + enc(branch) + '&system=' + enc(system)),
+                    api('/api/intra-keys')
+                ]);
+                const savedSet = new Set(savedKeys);
+                keysDiv.innerHTML = '<span class="contour-title">Фильтр ключей</span>' +
+                    '<div class="checklist-grid">' +
+                    keys.map(k => `<label class="check-item">
+                        <input type="checkbox" name="intraKey" value="${x(k)}" ${savedSet.size === 0 || savedSet.has(k) ? 'checked' : ''}>
+                        <span>${x(k)}</span>
+                    </label>`).join('') +
+                    '</div>';
+                keysDiv.classList.remove('hidden');
+            } catch (_) {}
+
             el('intraBtnRow').classList.remove('hidden');
         } catch (e) {
             listDiv.innerHTML = `<p style="color:var(--danger);font-size:0.85rem">Ошибка: ${x(e.message)}</p>`;
@@ -1232,6 +1255,19 @@
 
     function toggleAllIntraServices(checked) {
         document.querySelectorAll('input[name="intraService"]').forEach(cb => cb.checked = checked);
+    }
+
+    function toggleAllIntraKeys(checked) {
+        document.querySelectorAll('input[name="intraKey"]').forEach(cb => cb.checked = checked);
+    }
+
+    async function saveIntraKeys() {
+        const keys = [...document.querySelectorAll('input[name="intraKey"]:checked')].map(cb => cb.value);
+        try {
+            await api('/api/intra-keys', 'POST', keys);
+        } catch (e) {
+            alert('Не удалось сохранить: ' + e.message);
+        }
     }
 
     async function compareIntra() {
@@ -1280,17 +1316,24 @@
         const id = 'mf_' + Math.random().toString(36).slice(2, 9);
         const autoOpen = file.hasChanges;
 
+        const selectedKeys = new Set(
+            [...document.querySelectorAll('input[name="intraKey"]:checked')].map(cb => cb.value)
+        );
+        const properties = selectedKeys.size > 0
+            ? file.properties.filter(p => selectedKeys.has(p.key))
+            : file.properties;
+
         const thSvcs = svcs.map(s => `<th>${x(s)}</th>`).join('');
         const editCls = isLocalRepo ? ' editable-cell' : '';
-        const rows = file.properties.map(p => {
+        const rows = properties.map(p => {
             const isSame = p.allSame;
             const hiddenCls = isSame && !showSame ? ' hidden' : '';
             const sameCls   = isSame ? ' same-row' : '';
             const rowType   = isSame ? 'SAME' : 'MODIFIED';
             const cells = svcs.map(s => {
                 const val = p.values[s];
-                const filePath = system + '/' + s + '/' + file.fileName;
-                const editAttrs = isLocalRepo && val !== null && val !== undefined
+                const filePath = file.servicePaths && file.servicePaths[s];
+                const editAttrs = isLocalRepo && val !== null && val !== undefined && filePath
                     ? `data-filepath="${x(filePath)}" data-key="${x(p.key)}" onclick="startEdit(this)"` : '';
                 const disp = (val !== undefined && val !== null)
                     ? `<span class="${isSame ? 'val-right' : ''}">${x(val)}</span>`
@@ -1304,12 +1347,12 @@
             </tr>`;
         }).join('');
 
-        const body = `<table class="diff-table">
+        const body = `<div style="overflow-x:auto"><table class="diff-table">
             <thead><tr>
                 <th>Параметр</th>${thSvcs}<th>Статус</th>
             </tr></thead>
             <tbody>${rows}</tbody>
-        </table>`;
+        </table></div>`;
 
         return `
         <div class="service-item">

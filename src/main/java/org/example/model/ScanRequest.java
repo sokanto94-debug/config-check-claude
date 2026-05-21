@@ -7,5 +7,6 @@ package org.example.model;
  * @param branch     имя ветки, которую нужно найти в каждом репозитории.
  * @param baseBranch базовая ветка для ограничения истории (например, {@code main}).
  *                   Если {@code null} — определяется автоматически (main / master / develop).
+ * @param fetch      если {@code true} — выполнять {@code git fetch} перед сканированием каждого репозитория.
  */
-public record ScanRequest(String folderPath, String branch, String baseBranch) {}
+public record ScanRequest(String folderPath, String branch, String baseBranch, boolean fetch) {}

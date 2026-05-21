@@ -113,6 +113,15 @@ public class ApiController {
      *
      * @return JSON-массив строк с именами веток.
      */
+    @GetMapping("/debug/files")
+    public ResponseEntity<?> debugFiles(@RequestParam String branch) {
+        try {
+            return ResponseEntity.ok(gitService.listYamlFiles(branch));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/branches")
     public ResponseEntity<?> getBranches() {
         try {
@@ -203,6 +212,25 @@ public class ApiController {
         }
     }
 
+    @GetMapping("/intra-keys")
+    public ResponseEntity<?> getIntraKeys() {
+        try {
+            return ResponseEntity.ok(excludeKeysService.loadIntra());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/intra-keys")
+    public ResponseEntity<?> saveIntraKeys(@RequestBody List<String> keys) {
+        try {
+            excludeKeysService.saveIntra(keys);
+            return ResponseEntity.ok(Map.of("status", "saved"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     /**
      * Редактирует значение одного параметра в YAML-файле на диске.
      *
@@ -239,7 +267,7 @@ public class ApiController {
     @PostMapping("/scan")
     public ResponseEntity<?> scan(@RequestBody ScanRequest request) {
         try {
-            return ResponseEntity.ok(scanService.scan(request.folderPath(), request.branch(), request.baseBranch()));
+            return ResponseEntity.ok(scanService.scan(request));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

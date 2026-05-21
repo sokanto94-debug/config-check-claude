@@ -268,11 +268,11 @@ public class GitService {
      * @throws IOException при ошибке доступа к репозиторию.
      */
     private ObjectId resolveRef(Repository repo, String branch) throws IOException {
-        for (String ref : List.of(
-                "refs/remotes/origin/" + branch,
-                "refs/heads/" + branch,
-                branch
-        )) {
+        // Локальное репо: только локальные ветки. Удалённый клон: только remote tracking refs.
+        List<String> candidates = isLocalRepo()
+                ? List.of("refs/heads/" + branch, branch)
+                : List.of("refs/remotes/origin/" + branch, branch);
+        for (String ref : candidates) {
             ObjectId id = repo.resolve(ref);
             if (id != null) return id;
         }

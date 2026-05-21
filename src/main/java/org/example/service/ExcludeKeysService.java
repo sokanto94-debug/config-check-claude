@@ -22,29 +22,32 @@ import java.util.List;
 @Service
 public class ExcludeKeysService {
 
-    private static final Path FILE = Path.of("exclude-keys.json");
+    private static final Path EXCLUDE_FILE = Path.of("exclude-keys.json");
+    private static final Path INTRA_FILE   = Path.of("intra-keys.json");
     private final ObjectMapper mapper = new ObjectMapper();
 
-    /**
-     * Загружает список постоянных исключаемых ключей из файла.
-     *
-     * @return список ключей; пустой список, если файл не существует.
-     * @throws IOException если файл существует, но не может быть прочитан или разобран.
-     */
+    /** Загружает постоянные исключаемые ключи (вкладка «Сравнение контуров»). */
     public List<String> load() throws IOException {
-        if (!Files.exists(FILE)) return new ArrayList<>();
-        return mapper.readValue(FILE.toFile(), new TypeReference<List<String>>() {});
+        return loadFile(EXCLUDE_FILE);
     }
 
-    /**
-     * Сохраняет список постоянных исключаемых ключей в файл.
-     *
-     * <p>Полностью перезаписывает предыдущее содержимое файла.</p>
-     *
-     * @param keys список ключей для сохранения.
-     * @throws IOException если файл не может быть записан.
-     */
+    /** Сохраняет постоянные исключаемые ключи. */
     public void save(List<String> keys) throws IOException {
-        mapper.writeValue(FILE.toFile(), keys);
+        mapper.writeValue(EXCLUDE_FILE.toFile(), keys);
+    }
+
+    /** Загружает запомненный фильтр ключей (вкладка «Сравнение сервисов»). */
+    public List<String> loadIntra() throws IOException {
+        return loadFile(INTRA_FILE);
+    }
+
+    /** Сохраняет фильтр ключей для сравнения сервисов. */
+    public void saveIntra(List<String> keys) throws IOException {
+        mapper.writeValue(INTRA_FILE.toFile(), keys);
+    }
+
+    private List<String> loadFile(Path file) throws IOException {
+        if (!Files.exists(file)) return new ArrayList<>();
+        return mapper.readValue(file.toFile(), new TypeReference<List<String>>() {});
     }
 }

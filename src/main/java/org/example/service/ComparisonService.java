@@ -13,10 +13,13 @@ import java.util.stream.*;
  * <p>Предполагает следующую структуру репозитория:</p>
  * <pre>
  * {system}/
- *   {microservice}/
- *     application.yaml
- *     custom.yaml
- *     ...
+ *   namespace/
+ *     helm/
+ *       ChartsValues/
+ *         {microservice}/
+ *           application.yaml
+ *           custom.yaml
+ *           ...
  * </pre>
  *
  * <p>Поддерживает два режима сравнения:</p>
@@ -25,11 +28,13 @@ import java.util.stream.*;
  *   <li>{@link #compareServices} — сравнивает несколько микросервисов внутри одной ветки.</li>
  * </ul>
  *
- * <p>В обоих случаях используется объединение (union) ключей и файлов:
+ * <p>В обоих случаях используется объединение (union) ключей и файлов:cc
  * отсутствующие значения отображаются как {@code null}.</p>
  */
 @Service
 public class ComparisonService {
+
+    private static final String FIXED_INFIX = "namespace/helm/ChartsValues/";
 
     private final GitService gitService;
     private final YamlService yamlService;
@@ -50,8 +55,9 @@ public class ComparisonService {
      * @throws IOException при ошибке чтения репозитория.
      */
     public List<String> getSystems(String branch) throws IOException {
+        String infix = "/" + FIXED_INFIX;
         return gitService.listYamlFiles(branch).stream()
-                .filter(p -> p.chars().filter(c -> c == '/').count() >= 2)
+                .filter(p -> p.contains(infix))
                 .map(p -> p.split("/")[0])
                 .distinct()
                 .sorted()
@@ -70,7 +76,7 @@ public class ComparisonService {
      * @throws IOException при ошибке чтения репозитория.
      */
     public List<String> getMicroservices(String branch, String system) throws IOException {
-        String prefix = system + "/";
+        String prefix = system + "/" + FIXED_INFIX;
         return gitService.listYamlFiles(branch).stream()
                 .filter(p -> p.startsWith(prefix))
                 .map(p -> p.substring(prefix.length()))
@@ -135,7 +141,7 @@ public class ComparisonService {
      * @return отсортированный список уникальных имён микросервисов.
      */
     private List<String> extractServices(List<String> paths, String system) {
-        String prefix = system + "/";
+        String prefix = system + "/" + FIXED_INFIX;
         return paths.stream()
                 .filter(p -> p.startsWith(prefix))
                 .map(p -> p.substring(prefix.length()))
@@ -161,8 +167,8 @@ public class ComparisonService {
     private ServiceDiff compareService(ContourRef left, ContourRef right, String service,
                                         List<String> leftAllFiles, List<String> rightAllFiles,
                                         Set<String> excludeKeys) throws IOException {
-        String leftPrefix = left.system() + "/" + service + "/";
-        String rightPrefix = right.system() + "/" + service + "/";
+        String leftPrefix = left.system() + "/" + FIXED_INFIX + service + "/";
+        String rightPrefix = right.system() + "/" + FIXED_INFIX + service + "/";
 
         Map<String, String> leftFileMap = extractDirectFiles(leftAllFiles, leftPrefix);
         Map<String, String> rightFileMap = extractDirectFiles(rightAllFiles, rightPrefix);
@@ -178,10 +184,10 @@ public class ComparisonService {
             String rightPath = rightFileMap.get(fileName);
 
             if (leftPath == null) {
-                fileDiffs.add(new FileDiff(fileName, List.of(), DiffType.ADDED));
+                fileDiffs.add(new FileDiff(fileName, null, rightPath, List.of(), DiffType.ADDED));
                 anyDiff = true;
             } else if (rightPath == null) {
-                fileDiffs.add(new FileDiff(fileName, List.of(), DiffType.REMOVED));
+                fileDiffs.add(new FileDiff(fileName, leftPath, null, List.of(), DiffType.REMOVED));
                 anyDiff = true;
             } else {
                 String leftContent = gitService.readFile(left.branch(), leftPath);
@@ -189,8 +195,8 @@ public class ComparisonService {
                 Map<String, String> leftProps = yamlService.flatten(leftContent);
                 Map<String, String> rightProps = yamlService.flatten(rightContent);
                 List<PropertyDiff> propDiffs = diffProperties(leftProps, rightProps, excludeKeys);
-                boolean hasDiff = propDiffs.stream().anyMatch(d -> d.type() != DiffType.SAME);
-                fileDiffs.add(new FileDiff(fileName, propDiffs, hasDiff ? DiffType.MODIFIED : DiffType.SAME));
+                boolean hasDiff = propDiffs.stream().anyMatch(d -> d.type() == DiffType.ADDED || d.type() == DiffType.REMOVED);
+                fileDiffs.add(new FileDiff(fileName, leftPath, rightPath, propDiffs, hasDiff ? DiffType.MODIFIED : DiffType.SAME));
                 if (hasDiff) anyDiff = true;
             }
         }
@@ -237,7 +243,7 @@ public class ComparisonService {
         List<String> services = getMicroservices(branch, system);
         Set<String> allKeys = new TreeSet<>();
         for (String svc : services) {
-            String prefix = system + "/" + svc + "/";
+            String prefix = system + "/" + FIXED_INFIX + svc + "/";
             Map<String, String> fileMap = extractDirectFiles(allFiles, prefix);
             for (Map.Entry<String, String> entry : fileMap.entrySet()) {
                 String content = gitService.readFile(branch, entry.getValue());
@@ -271,8 +277,10 @@ public class ComparisonService {
 
         // service -> fileName -> flattenedProps
         Map<String, Map<String, Map<String, String>>> svcData = new LinkedHashMap<>();
+        // service -> fileName -> fullPath
+        Map<String, Map<String, String>> svcPaths = new LinkedHashMap<>();
         for (String svc : services) {
-            String prefix = system + "/" + svc + "/";
+            String prefix = system + "/" + FIXED_INFIX + svc + "/";
             Map<String, String> fileMap = extractDirectFiles(allFiles, prefix);
             Map<String, Map<String, String>> fileProps = new LinkedHashMap<>();
             for (Map.Entry<String, String> entry : fileMap.entrySet()) {
@@ -280,6 +288,7 @@ public class ComparisonService {
                 fileProps.put(entry.getKey(), yamlService.flatten(content));
             }
             svcData.put(svc, fileProps);
+            svcPaths.put(svc, fileMap);
         }
 
         Set<String> allFileNames = new TreeSet<>();
@@ -294,6 +303,12 @@ public class ComparisonService {
                 allKeys.addAll(svcData.get(svc).getOrDefault(fileName, Map.of()).keySet());
             }
 
+            Map<String, String> servicePaths = new LinkedHashMap<>();
+            for (String svc : services) {
+                String p = svcPaths.get(svc).get(fileName);
+                if (p != null) servicePaths.put(svc, p);
+            }
+
             List<MultiPropertyDiff> propDiffs = new ArrayList<>();
             for (String key : allKeys) {
                 Map<String, String> values = new LinkedHashMap<>();
@@ -305,7 +320,7 @@ public class ComparisonService {
             }
 
             boolean hasChanges = propDiffs.stream().anyMatch(p -> !p.allSame());
-            fileDiffs.add(new MultiFileDiff(fileName, propDiffs, hasChanges));
+            fileDiffs.add(new MultiFileDiff(fileName, servicePaths, propDiffs, hasChanges));
         }
 
         return new MultiCompareResponse(branch, system, services, fileDiffs);
@@ -329,12 +344,11 @@ public class ComparisonService {
         allKeys.removeAll(excludeKeys);
 
         return allKeys.stream().map(key -> {
-            String leftVal = left.get(key);
-            String rightVal = right.get(key);
-            if (leftVal == null) return new PropertyDiff(key, null, rightVal, DiffType.ADDED);
-            if (rightVal == null) return new PropertyDiff(key, leftVal, null, DiffType.REMOVED);
-            if (!leftVal.equals(rightVal)) return new PropertyDiff(key, leftVal, rightVal, DiffType.MODIFIED);
-            return new PropertyDiff(key, leftVal, rightVal, DiffType.SAME);
+            boolean inLeft  = left.containsKey(key);
+            boolean inRight = right.containsKey(key);
+            if (!inLeft)  return new PropertyDiff(key, null, null, DiffType.ADDED);
+            if (!inRight) return new PropertyDiff(key, null, null, DiffType.REMOVED);
+            return new PropertyDiff(key, null, null, DiffType.SAME);
         }).toList();
     }
 }

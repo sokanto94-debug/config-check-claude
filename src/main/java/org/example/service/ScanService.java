@@ -7,6 +7,7 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.revwalk.filter.RevFilter;
+import org.example.model.ScanRequest;
 import org.example.model.ServiceScanResult;
 import org.springframework.stereotype.Service;
 
@@ -36,10 +37,10 @@ public class ScanService {
      * @return список результатов, отсортированный по имени сервиса.
      * @throws IOException если папка недоступна.
      */
-    public List<ServiceScanResult> scan(String folderPath, String branch, String baseBranch) throws IOException {
-        Path root = Path.of(folderPath);
+    public List<ServiceScanResult> scan(ScanRequest request) throws IOException {
+        Path root = Path.of(request.folderPath());
         if (!Files.isDirectory(root)) {
-            throw new IllegalArgumentException("Путь не является директорией: " + folderPath);
+            throw new IllegalArgumentException("Путь не является директорией: " + request.folderPath());
         }
 
         List<ServiceScanResult> results = new ArrayList<>();
@@ -54,7 +55,7 @@ public class ScanService {
             for (Path dir : gitDirs) {
                 String name = dir.getFileName().toString();
                 try {
-                    results.add(scanOne(dir, name, branch, baseBranch));
+                    results.add(scanOne(dir, name, request.branch(), request.baseBranch(), request.fetch()));
                 } catch (Exception e) {
                     results.add(new ServiceScanResult(name, false, List.of(), e.getMessage()));
                 }
@@ -64,8 +65,16 @@ public class ScanService {
         return results;
     }
 
-    private ServiceScanResult scanOne(Path repoPath, String name, String branch, String baseBranch) {
+    private ServiceScanResult scanOne(Path repoPath, String name, String branch, String baseBranch, boolean doFetch) {
         try (Git git = Git.open(repoPath.toFile())) {
+            if (doFetch) {
+                try {
+                    git.fetch().setRemote("origin").setForceUpdate(true).call();
+                } catch (Exception ignored) {
+                    // fetch нефатален: сеть недоступна или нет remote — продолжаем с локальными данными
+                }
+            }
+
             Repository repo = git.getRepository();
 
             ObjectId branchTip = resolveRef(repo, branch);
@@ -174,8 +183,8 @@ public class ScanService {
 
     private ObjectId resolveRef(Repository repo, String branch) throws IOException {
         for (String ref : List.of(
-                "refs/remotes/origin/" + branch,
                 "refs/heads/" + branch,
+                "refs/remotes/origin/" + branch,
                 branch)) {
             ObjectId id = repo.resolve(ref);
             if (id != null) return id;
